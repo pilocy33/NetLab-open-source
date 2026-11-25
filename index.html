@@ -1,0 +1,2204 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NetGlass — Интерактивный симулятор сетей</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* Основные переменные и монохромная палитра с эффектом iOS-стекла */
+    :root {
+      --glass-bg: rgba(255, 255, 255, 0.06);
+      --glass-bg-elevated: rgba(255, 255, 255, 0.11);
+      --glass-bg-dark: rgba(10, 10, 12, 0.65);
+      --glass-border: rgba(255, 255, 255, 0.18);
+      --glass-border-strong: rgba(255, 255, 255, 0.34);
+      --glass-highlight: inset 0 1px 0 0 rgba(255, 255, 255, 0.28);
+      --glass-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: #f5f5f7;
+      background: radial-gradient(circle at 15% 15%, #2c2c30 0%, #121215 45%, #050507 100%);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Плавающие монохромные световые сферы на фоне для глубины преломления стекла */
+    .ambient-orb {
+      position: fixed;
+      border-radius: 9999px;
+      pointer-events: none;
+      filter: blur(85px);
+      z-index: 0;
+      opacity: 0.45;
+      animation: floatOrb 18s ease-in-out infinite alternate;
+    }
+
+    .orb-1 {
+      width: 420px;
+      height: 420px;
+      top: -80px;
+      left: 8%;
+      background: linear-gradient(135deg, #ffffff 0%, #71717a 100%);
+    }
+
+    .orb-2 {
+      width: 480px;
+      height: 480px;
+      bottom: -120px;
+      right: 6%;
+      background: linear-gradient(135deg, #d4d4d8 0%, #27272a 100%);
+      animation-delay: -6s;
+    }
+
+    .orb-3 {
+      width: 300px;
+      height: 300px;
+      top: 42%;
+      left: 48%;
+      background: linear-gradient(135deg, #a1a1aa 0%, #18181b 100%);
+      opacity: 0.25;
+      animation-delay: -11s;
+    }
+
+    @keyframes floatOrb {
+      0% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(25px, -30px) scale(1.06); }
+      100% { transform: translate(-20px, 20px) scale(0.96); }
+    }
+
+    /* Классы iOS Glassmorphism */
+    .ios-glass {
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.03) 100%);
+      backdrop-filter: blur(24px) saturate(140%);
+      -webkit-backdrop-filter: blur(24px) saturate(140%);
+      border: 1px solid var(--glass-border);
+      box-shadow: var(--glass-highlight), var(--glass-shadow);
+    }
+
+    .ios-glass-card {
+      background: linear-gradient(160deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 8px 24px rgba(0, 0, 0, 0.45);
+      transition: all 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .ios-glass-card:hover {
+      border-color: rgba(255, 255, 255, 0.34);
+      background: linear-gradient(160deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.06) 100%);
+    }
+
+    .ios-pill {
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      transition: all 0.2s ease;
+    }
+
+    .ios-pill:hover {
+      background: rgba(255, 255, 255, 0.16);
+      border-color: rgba(255, 255, 255, 0.35);
+    }
+
+    .ios-pill-active {
+      background: linear-gradient(180deg, #ffffff 0%, #d4d4d8 100%);
+      color: #09090b;
+      border-color: #ffffff;
+      box-shadow: 0 4px 18px rgba(255, 255, 255, 0.28);
+      font-weight: 600;
+    }
+
+    /* Тонкая сетка на холсте топологии */
+    .topology-grid {
+      background-image: 
+        radial-gradient(rgba(255, 255, 255, 0.14) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+
+    /* Узлы устройств на холсте */
+    .device-node {
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+      transition: transform 0.15s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+
+    .device-node:active {
+      cursor: grabbing;
+    }
+
+    .device-node.selected {
+      border-color: #ffffff !important;
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35), 0 14px 30px rgba(0, 0, 0, 0.75) !important;
+    }
+
+    .device-node.ping-source {
+      border-color: #ffffff !important;
+      animation: pulseRing 1.4s infinite;
+    }
+
+    @keyframes pulseRing {
+      0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.55); }
+      70% { box-shadow: 0 0 0 12px rgba(255, 255, 255, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+    }
+
+    /* Кастомный скроллбар в монохромном стиле */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.35);
+    }
+
+    /* Анимация пакета */
+    @keyframes packetGlow {
+      0%, 100% { filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.9)); }
+      50% { filter: drop-shadow(0 0 14px rgba(255, 255, 255, 1)); }
+    }
+    .packet-orb {
+      animation: packetGlow 0.8s infinite;
+    }
+  </style>
+</head>
+<body class="antialiased selection:bg-white selection:text-black">
+
+  <!-- Фоновые монохромные градиентные сферы -->
+  <div class="ambient-orb orb-1"></div>
+  <div class="ambient-orb orb-2"></div>
+  <div class="ambient-orb orb-3"></div>
+
+  <!-- Основной контейнер приложения -->
+  <div class="relative z-10 max-w-[1600px] mx-auto px-3 sm:px-6 py-3 sm:py-4 flex flex-col gap-3 sm:gap-4 min-h-screen">
+
+    <!-- Верхняя навигационная панель в стиле iOS Dynamic Bar -->
+    <header class="ios-glass rounded-3xl px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+      <!-- Логотип -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-white via-zinc-300 to-zinc-700 p-[1px] shadow-lg">
+          <div class="w-full h-full rounded-2xl bg-zinc-950/90 flex items-center justify-center">
+            <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="5" r="2.5" />
+              <circle cx="5" cy="19" r="2.5" />
+              <circle cx="19" cy="19" r="2.5" />
+              <path d="M10.5 7.2L6.5 16.8M13.5 7.2L17.5 16.8M7.5 19H16.5" stroke-linecap="round" />
+            </svg>
+          </div>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-bold tracking-tight text-base sm:text-lg bg-gradient-to-r from-white via-zinc-200 to-zinc-400 bg-clip-text text-transparent">
+              NetGlass
+            </span>
+            <span class="text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full bg-white/10 border border-white/20 text-zinc-300">
+              Web Packet Tracer
+            </span>
+          </div>
+          <p class="text-xs text-zinc-400 hidden sm:block">Интерактивная лаборатория сетевых технологий</p>
+        </div>
+      </div>
+
+      <!-- Переключатель режимов -->
+      <nav class="flex items-center p-1 rounded-2xl bg-black/40 border border-white/10">
+        <button id="nav-lessons" onclick="switchMainTab('lessons')" class="ios-pill-active px-3 sm:px-4 py-1.5 rounded-xl text-xs sm:text-sm transition-all cursor-pointer">
+          Уроки и лаборатория
+        </button>
+        <button id="nav-sandbox" onclick="switchMainTab('sandbox')" class="px-3 sm:px-4 py-1.5 rounded-xl text-xs sm:text-sm text-zinc-300 hover:text-white transition-all cursor-pointer">
+          Свободная песочница
+        </button>
+        <button id="nav-cli-guide" onclick="switchMainTab('guide')" class="px-3 sm:px-4 py-1.5 rounded-xl text-xs sm:text-sm text-zinc-300 hover:text-white transition-all cursor-pointer">
+          Справочник CLI
+        </button>
+      </nav>
+
+      <!-- Статус прогресса и сброс -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <div class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-white/5 border border-white/10">
+          <span class="text-xs text-zinc-400">Прогресс курса:</span>
+          <span id="course-progress-text" class="text-xs font-semibold text-white">0 / 4</span>
+          <div class="w-16 h-1.5 rounded-full bg-white/10 overflow-hidden">
+            <div id="course-progress-bar" class="h-full bg-gradient-to-r from-zinc-400 to-white transition-all duration-500" style="width: 0%"></div>
+          </div>
+        </div>
+        <button onclick="resetCurrentTopology()" class="ios-pill px-3 py-2 rounded-2xl text-xs text-zinc-200 flex items-center gap-1.5 cursor-pointer" title="Сбросить текущую схему">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M3 3v5h5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>Сброс</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Вкладка: Справочник команд Cisco IOS CLI (скрыта по умолчанию) -->
+    <section id="view-guide" class="hidden ios-glass rounded-3xl p-5 sm:p-8">
+      <div class="max-w-4xl mx-auto">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/15">
+          <div>
+            <h2 class="text-xl sm:text-2xl font-bold bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
+              Справочник команд Cisco IOS CLI & Диагностики
+            </h2>
+            <p class="text-sm text-zinc-400 mt-1">
+              Используйте эти команды во встроенном терминале маршрутизаторов, коммутаторов и рабочих станций.
+            </p>
+          </div>
+          <button onclick="switchMainTab('lessons')" class="ios-pill-active px-4 py-2 rounded-2xl text-xs cursor-pointer self-start">
+            Вернуться к симулятору
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+          <div class="ios-glass-card rounded-2xl p-4">
+            <div class="text-xs uppercase tracking-wider text-zinc-400 mb-2">Режимы работы IOS</div>
+            <div class="space-y-2.5 text-sm">
+              <div>
+                <code class="font-mono-code text-white bg-white/10 px-2 py-0.5 rounded">enable</code>
+                <p class="text-xs text-zinc-400 mt-1">Переход из пользовательского режима (Router>) в привилегированный (Router#).</p>
+              </div>
+              <div>
+                <code class="font-mono-code text-white bg-white/10 px-2 py-0.5 rounded">configure terminal</code> <span class="text-xs text-zinc-500">(conf t)</span>
+                <p class="text-xs text-zinc-400 mt-1">Вход в режим глобальной конфигурации устройства (Router(config)#).</p>
+              </div>
+              <div>
+                <code class="font-mono-code text-white bg-white/10 px-2 py-0.5 rounded">exit / end</code>
+                <p class="text-xs text-zinc-400 mt-1">Выход на один уровень выше или возврат в привилегированный режим.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="ios-glass-card rounded-2xl p-4">
+            <div class="text-xs uppercase tracking-wider text-zinc-400 mb-2">Настройка интерфейсов</div>
+            <div class="space-y-2.5 text-sm">
+              <div>
+                <code class="font-mono-code text-white bg-white/10 px-2 py-0.5 rounded">interface gig0/0</code> <span class="text-xs text-zinc-500">(int g0/0)</span>
+                <p class="text-xs text-zinc-400 mt-1">Выбор сетевого интерфейса GigabitEthernet0/0 для настройки.</p>
+              </div>
+              <div>
+                <code class="font-mono-code text-white bg-white/10 px-2 py-0.5 rounded">ip address 192.168.1.1 255.255.255.0</code>
+                <p class="text-xs text-zinc-400 mt-1">Назначение IPv4-адреса и маски подсети на выбранный порт.</p>
+              </div>
+              <div>
+                <code class="font-mono-code text-white bg-white/10 px-2 py-0.5 rounded">no shutdown</code> <span class="text-xs text-zinc-500">(no shut)</span>
+                <p class="text-xs text-zinc-400 mt-1">Включение порта (перевод из состояния administratively down в UP).</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="ios-glass-card rounded-2xl p-4">
+            <div class="text-xs uppercase tracking-wider text-zinc-400 mb-2">Проверка и мониторинг</div>
+            <div class="space-y-2.5 text-sm">
+              <div>
+                <code class="font-mono-code text-white bg-white/10 px-2 py-0.5 rounded">show ip interface brief</code> <span class="text-xs text-zinc-500">(sh ip int br)</span>
+                <p class="text-xs text-zinc-400 mt-1">Краткая таблица всех интерфейсов, их IP-адресов и статусов (up/down).</p>
+              </div>
+              <div>
+                <code class="font-mono-code text-white bg-white/10 px-2 py-0.5 rounded">show ip route</code>
+                <p class="text-xs text-zinc-400 mt-1">Просмотр таблицы маршрутизации (Connected сети и шлюзы).</p>
+              </div>
+              <div>
+                <code class="font-mono-code text-white bg-white/10 px-2 py-0.5 rounded">show running-config</code>
+                <p class="text-xs text-zinc-400 mt-1">Отображение текущей активной конфигурации устройства.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="ios-glass-card rounded-2xl p-4">
+            <div class="text-xs uppercase tracking-wider text-zinc-400 mb-2">Диагностика сети (ПК и Роутер)</div>
+            <div class="space-y-2.5 text-sm">
+              <div>
+                <code class="font-mono-code text-white bg-white/10 px-2 py-0.5 rounded">ping 192.168.1.2</code>
+                <p class="text-xs text-zinc-400 mt-1">Отправка ICMP Echo-запросов с визуальной анимацией прохождения пакета по кабелям.</p>
+              </div>
+              <div>
+                <code class="font-mono-code text-white bg-white/10 px-2 py-0.5 rounded">ipconfig</code> <span class="text-xs text-zinc-500">(на ПК / Сервере)</span>
+                <p class="text-xs text-zinc-400 mt-1">Просмотр IP-адреса, маски подсети и основного шлюза рабочей станции.</p>
+              </div>
+              <div>
+                <code class="font-mono-code text-white bg-white/10 px-2 py-0.5 rounded">arp -a</code>
+                <p class="text-xs text-zinc-400 mt-1">Просмотр ARP-таблицы соответствия IP-адресов и MAC-адресов.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Основное рабочее пространство (Уроки + Холст симулятора + Инспектор/CLI) -->
+    <main id="view-workspace" class="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 flex-1">
+
+      <!-- ЛЕВАЯ ПАНЕЛЬ: Интерактивные уроки и пошаговые задания -->
+      <aside id="lessons-sidebar" class="lg:col-span-3 ios-glass rounded-3xl p-4 flex flex-col gap-3 max-h-[calc(100vh-110px)] overflow-y-auto">
+        <div class="flex items-center justify-between">
+          <span class="text-xs uppercase tracking-widest text-zinc-400 font-semibold">Модули обучения</span>
+          <span class="text-[11px] text-zinc-400">Packet Tracer Lab</span>
+        </div>
+
+        <!-- Селектор уроков -->
+        <div id="lesson-selector-list" class="grid grid-cols-2 lg:grid-cols-1 gap-2"></div>
+
+        <!-- Карточка текущего урока -->
+        <div class="ios-glass-card rounded-2xl p-4 flex flex-col gap-3 mt-1">
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <span id="lesson-badge" class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/15 text-white font-medium">
+                Урок 1
+              </span>
+              <h2 id="lesson-title" class="text-base font-bold text-white mt-1.5 leading-snug">
+                Прямое соединение и IPv4
+              </h2>
+            </div>
+          </div>
+
+          <p id="lesson-theory" class="text-xs text-zinc-300 leading-relaxed">
+            Описание теории...
+          </p>
+
+          <!-- Подсказка по архитектуре -->
+          <div class="rounded-xl bg-black/40 border border-white/10 p-2.5">
+            <div class="text-[10px] uppercase tracking-wider text-zinc-400 mb-1">Справка по теме</div>
+            <p id="lesson-tip" class="text-[11px] text-zinc-300 leading-relaxed"></p>
+          </div>
+
+          <!-- Чек-лист интерактивных задач с автопроверкой -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-semibold text-white">Задания (автопроверка)</span>
+              <span id="lesson-tasks-counter" class="text-[11px] text-zinc-400">0/3</span>
+            </div>
+            <ul id="lesson-tasks-list" class="space-y-2"></ul>
+          </div>
+
+          <!-- Кнопка перехода к следующему уроку -->
+          <button id="next-lesson-btn" onclick="goToNextLesson()" class="hidden w-full py-2.5 rounded-2xl ios-pill-active text-xs font-semibold cursor-pointer mt-1">
+            Урок пройден! Следующий урок →
+          </button>
+        </div>
+      </aside>
+
+      <!-- ЦЕНТРАЛЬНАЯ ПАНЕЛЬ: Интерактивный холст топологии сети -->
+      <section id="canvas-column" class="lg:col-span-6 flex flex-col gap-3">
+        <!-- Панель инструментов холста -->
+        <div class="ios-glass rounded-3xl p-2.5 sm:px-4 flex flex-wrap items-center justify-between gap-2">
+          <!-- Добавление устройств -->
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="text-[11px] text-zinc-400 mr-1 hidden sm:inline">Устройства:</span>
+            <button onclick="addDevice('PC')" class="ios-pill px-2.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer" title="Добавить ПК">
+              <span>💻</span><span>ПК</span>
+            </button>
+            <button onclick="addDevice('Switch')" class="ios-pill px-2.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer" title="Добавить Коммутатор">
+              <span>🔀</span><span>Switch</span>
+            </button>
+            <button onclick="addDevice('Router')" class="ios-pill px-2.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer" title="Добавить Маршрутизатор">
+              <span>🌐</span><span>Router</span>
+            </button>
+            <button onclick="addDevice('Server')" class="ios-pill px-2.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer" title="Добавить Сервер">
+              <span>🖥️</span><span>Server</span>
+            </button>
+          </div>
+
+          <!-- Инструменты кабеля и отправки пакетов -->
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <button id="tool-cable-btn" onclick="toggleToolMode('cable')" class="ios-pill px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer">
+              <span>🔌</span><span>Кабель</span>
+            </button>
+            <button id="tool-ping-btn" onclick="toggleToolMode('ping')" class="ios-pill px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer">
+              <span>✉️</span><span>Отправить Ping</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Строка состояния режима взаимодействия -->
+        <div id="canvas-status-banner" class="ios-glass rounded-2xl px-4 py-2 flex items-center justify-between text-xs">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+            <span id="canvas-status-text" class="text-zinc-200">Режим выбора: перетаскивайте устройства или нажмите на узел для настройки.</span>
+          </div>
+          <button id="cancel-tool-btn" onclick="toggleToolMode('select')" class="hidden text-[11px] text-zinc-400 hover:text-white underline cursor-pointer">
+            Отмена
+          </button>
+        </div>
+
+        <!-- Область топологии (SVG + HTML узлы) -->
+        <div id="topology-stage" class="ios-glass topology-grid rounded-3xl relative flex-1 min-h-[380px] sm:min-h-[440px] overflow-hidden select-none">
+          <!-- SVG слой для кабелей и анимации пакетов -->
+          <svg id="topology-svg" class="absolute inset-0 w-full h-full pointer-events-none z-10"></svg>
+          
+          <!-- HTML слой для интерактивных устройств -->
+          <div id="devices-layer" class="absolute inset-0 z-20"></div>
+
+          <!-- Легенда в углу холста -->
+          <div class="absolute bottom-3 left-3 z-30 px-3 py-1.5 rounded-2xl bg-black/55 backdrop-blur-md border border-white/10 text-[10px] text-zinc-400 flex items-center gap-3">
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-white inline-block"></span> Порт UP</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-zinc-600 inline-block"></span> Порт DOWN</span>
+            <span class="hidden sm:inline">Клик по кабелю — удалить</span>
+          </div>
+        </div>
+
+        <!-- Журнал симуляции пакетов (Real-time Simulation PDU Log) -->
+        <div class="ios-glass rounded-3xl p-3.5">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-semibold text-white">Журнал симуляции пакетов (ICMP / ARP)</span>
+              <span id="sim-status-pill" class="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-zinc-300">Готов</span>
+            </div>
+            <button onclick="clearSimulationLogs()" class="text-[11px] text-zinc-400 hover:text-white cursor-pointer">Очистить</button>
+          </div>
+          <div id="simulation-log-list" class="max-h-28 overflow-y-auto space-y-1.5 font-mono-code text-[11px]">
+            <div class="text-zinc-400 px-2 py-1 rounded-lg bg-white/5">
+              [Система] Выберите инструмент «Отправить Ping» или введите команду <span class="text-white">ping &lt;ip&gt;</span> в терминале устройства.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ПРАВАЯ ПАНЕЛЬ: Инспектор устройства + Терминал Cisco IOS CLI -->
+      <aside class="lg:col-span-3 ios-glass rounded-3xl p-4 flex flex-col gap-3 max-h-[calc(100vh-110px)] overflow-y-auto">
+        <!-- Заголовок выбранного устройства -->
+        <div id="inspector-empty" class="flex-1 flex flex-col items-center justify-center text-center p-6 text-zinc-400">
+          <div class="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-3 text-xl">
+            🎛️
+          </div>
+          <p class="text-sm font-medium text-zinc-200">Устройство не выбрано</p>
+          <p class="text-xs text-zinc-400 mt-1">Нажмите на компьютер, коммутатор или роутер на схеме, чтобы настроить IP-адрес или открыть терминал CLI.</p>
+        </div>
+
+        <div id="inspector-content" class="hidden flex flex-col gap-3">
+          <!-- Шапка устройства -->
+          <div class="flex items-center justify-between pb-2.5 border-b border-white/15">
+            <div class="flex items-center gap-2.5">
+              <div id="insp-icon" class="w-9 h-9 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center text-lg">💻</div>
+              <div>
+                <h3 id="insp-name" class="text-sm font-bold text-white">PC1</h3>
+                <p id="insp-type" class="text-[11px] text-zinc-400">Рабочая станция</p>
+              </div>
+            </div>
+            <button onclick="deleteSelectedDevice()" class="px-2.5 py-1 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-[11px] text-zinc-300 cursor-pointer" title="Удалить устройство">
+              Удалить
+            </button>
+          </div>
+
+          <!-- Вкладки инспектора: Настройка GUI / Терминал CLI -->
+          <div class="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-black/40 border border-white/10">
+            <button id="insp-tab-gui" onclick="switchInspectorTab('gui')" class="ios-pill-active py-1.5 rounded-xl text-xs cursor-pointer">
+              Параметры IP
+            </button>
+            <button id="insp-tab-cli" onclick="switchInspectorTab('cli')" class="py-1.5 rounded-xl text-xs text-zinc-300 hover:text-white cursor-pointer">
+              Терминал CLI
+            </button>
+          </div>
+
+          <!-- Вкладка GUI: Настройка интерфейсов -->
+          <div id="insp-panel-gui" class="space-y-3">
+            <!-- Блок для End-устройств (PC / Server) -->
+            <div id="gui-host-form" class="space-y-2.5">
+              <div>
+                <label class="block text-[11px] text-zinc-400 mb-1">IPv4-адрес</label>
+                <input id="input-ip" type="text" placeholder="192.168.1.10" class="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/15 text-xs font-mono-code text-white focus:outline-none focus:border-white" />
+              </div>
+              <div>
+                <label class="block text-[11px] text-zinc-400 mb-1">Маска подсети (Subnet Mask)</label>
+                <input id="input-mask" type="text" placeholder="255.255.255.0" class="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/15 text-xs font-mono-code text-white focus:outline-none focus:border-white" />
+              </div>
+              <div>
+                <label class="block text-[11px] text-zinc-400 mb-1">Основной шлюз (Default Gateway)</label>
+                <input id="input-gateway" type="text" placeholder="192.168.1.1" class="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/15 text-xs font-mono-code text-white focus:outline-none focus:border-white" />
+              </div>
+              <div class="flex items-center justify-between pt-1">
+                <span class="text-xs text-zinc-300">Состояние сетевой карты</span>
+                <button id="toggle-host-port-btn" onclick="toggleHostInterface()" class="px-3 py-1 rounded-full text-[11px] font-medium cursor-pointer border"></button>
+              </div>
+              <button onclick="saveHostConfig()" class="w-full py-2 rounded-xl ios-pill-active text-xs font-semibold cursor-pointer">
+                Применить настройки
+              </button>
+            </div>
+
+            <!-- Блок для сетевых устройств (Router / Switch) -->
+            <div id="gui-network-interfaces" class="hidden space-y-2.5">
+              <p class="text-[11px] text-zinc-400">Интерфейсы устройства (можно также настроить через CLI):</p>
+              <div id="interfaces-list" class="space-y-2"></div>
+            </div>
+
+            <!-- MAC-адрес устройства -->
+            <div class="rounded-xl bg-white/5 border border-white/10 p-2.5 flex items-center justify-between">
+              <span class="text-[11px] text-zinc-400">Аппаратный MAC:</span>
+              <span id="insp-mac" class="text-[11px] font-mono-code text-zinc-200">00:1A:2B:3C:4D:01</span>
+            </div>
+          </div>
+
+          <!-- Вкладка CLI: Консоль Cisco IOS / Командная строка -->
+          <div id="insp-panel-cli" class="hidden flex flex-col gap-2">
+            <div id="cli-output" class="h-64 overflow-y-auto rounded-2xl bg-black/80 border border-white/15 p-3 font-mono-code text-[11px] text-zinc-200 space-y-1 leading-relaxed"></div>
+            <form onsubmit="handleCliSubmit(event)" class="flex items-center gap-1.5">
+              <span id="cli-prompt-label" class="font-mono-code text-[11px] text-white shrink-0">PC1&gt;</span>
+              <input id="cli-input" type="text" autocomplete="off" spellcheck="false" placeholder="Введите команду (help)..." class="w-full px-2.5 py-1.5 rounded-xl bg-black/70 border border-white/20 text-xs font-mono-code text-white focus:outline-none focus:border-white" />
+            </form>
+            <div class="flex flex-wrap gap-1 pt-0.5" id="cli-quick-chips"></div>
+          </div>
+        </div>
+      </aside>
+
+    </main>
+  </div>
+
+  <!-- Модальное окно уведомлений вместо стандартного alert() -->
+  <div id="toast-notification" class="fixed bottom-5 right-5 z-50 pointer-events-none opacity-0 translate-y-3 transition-all duration-300">
+    <div class="ios-glass rounded-2xl px-4 py-3 flex items-center gap-2.5 shadow-2xl border border-white/25">
+      <span id="toast-icon" class="text-sm">✨</span>
+      <span id="toast-message" class="text-xs font-medium text-white">Уведомление</span>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * NetGlass // Web Packet Tracer Engine
+     * Полный симулятор L2/L3 сетей с поддержкой IPv4, масок подсети, шлюзов по умолчанию,
+     * коммутации, маршрутизации, Cisco IOS CLI и пошаговой проверки лабораторных работ.
+     */
+
+    // --- ГЛОБАЛЬНОЕ СОСТОЯНИЕ ПРИЛОЖЕНИЯ ---
+    const state = {
+      mainTab: 'lessons', // 'lessons' | 'sandbox' | 'guide'
+      currentLessonIndex: 0,
+      completedLessons: new Set(),
+      toolMode: 'select', // 'select' | 'cable' | 'ping'
+      cableStartDeviceId: null,
+      pingSourceDeviceId: null,
+      selectedDeviceId: null,
+      inspectorTab: 'gui', // 'gui' | 'cli'
+      devices: [],
+      links: [],
+      draggingDeviceId: null,
+      dragOffset: { x: 0, y: 0 },
+      isAnimatingPacket: false
+    };
+
+    // --- ОПРЕДЕЛЕНИЕ 4 ИНТЕРАКТИВНЫХ ЛАБОРАТОРНЫХ УРОКОВ ---
+    const LESSONS = [
+      {
+        id: 0,
+        badge: 'Урок 1 • Базовый уровень',
+        title: 'Прямое соединение ПК и настройка IPv4',
+        theory: 'Чтобы два компьютера могли обмениваться данными по протоколу IP, они должны быть соединены кабелем и находиться в одной IP-подсети (одинаковая сетевая часть адреса при заданной маске).',
+        tip: 'Назначьте PC1 адрес 192.168.1.10, а PC2 адрес 192.168.1.20 с маской 255.255.255.0. Затем соедините их кабелем и отправьте Ping.',
+        setup: () => ({
+          devices: [
+            createDeviceObj('pc1', 'PC1', 'PC', 22, 46, { ip: '', mask: '255.255.255.0', gateway: '', up: true }),
+            createDeviceObj('pc2', 'PC2', 'PC', 72, 46, { ip: '', mask: '255.255.255.0', gateway: '', up: true })
+          ],
+          links: []
+        }),
+        tasks: [
+          {
+            id: 'l1_t1',
+            text: 'Соедините PC1 и PC2 виртуальным кабелем',
+            check: () => state.links.some(l => (l.from === 'pc1' && l.to === 'pc2') || (l.from === 'pc2' && l.to === 'pc1'))
+          },
+          {
+            id: 'l1_t2',
+            text: 'Назначьте PC1 IP: 192.168.1.10 (маска 255.255.255.0)',
+            check: () => {
+              const d = getDevice('pc1');
+              return d && d.interfaces[0].ip === '192.168.1.10' && d.interfaces[0].mask === '255.255.255.0';
+            }
+          },
+          {
+            id: 'l1_t3',
+            text: 'Назначьте PC2 IP: 192.168.1.20 (маска 255.255.255.0)',
+            check: () => {
+              const d = getDevice('pc2');
+              return d && d.interfaces[0].ip === '192.168.1.20' && d.interfaces[0].mask === '255.255.255.0';
+            }
+          },
+          {
+            id: 'l1_t4',
+            text: 'Выполните успешный Ping между PC1 и PC2',
+            check: () => state.lessonFlags?.l1_ping_ok === true
+          }
+        ]
+      },
+      {
+        id: 1,
+        badge: 'Урок 2 • Уровень L2 (Коммутация)',
+        title: 'Локальная сеть через Switch и сервер',
+        theory: 'Коммутатор (Switch) объединяет несколько узлов в единый широковещательный домен и пересылает кадры Ethernet на основе MAC-адресов и ARP-таблицы.',
+        tip: 'Подключите Server1 к Switch1. Задайте Server1 адрес 10.0.0.100 (маска 255.255.255.0) и проверьте связь с PC1 (10.0.0.10).',
+        setup: () => ({
+          devices: [
+            createDeviceObj('pc1', 'PC1', 'PC', 18, 28, { ip: '10.0.0.10', mask: '255.255.255.0', gateway: '', up: true }),
+            createDeviceObj('pc2', 'PC2', 'PC', 18, 72, { ip: '10.0.0.20', mask: '255.255.255.0', gateway: '', up: true }),
+            createDeviceObj('sw1', 'Switch1', 'Switch', 50, 50),
+            createDeviceObj('srv1', 'Server1', 'Server', 82, 50, { ip: '', mask: '255.255.255.0', gateway: '', up: true })
+          ],
+          links: [
+            { id: 'lnk_1', from: 'pc1', fromPort: 'Fa0', to: 'sw1', toPort: 'Fa0/1' },
+            { id: 'lnk_2', from: 'pc2', fromPort: 'Fa0', to: 'sw1', toPort: 'Fa0/2' }
+          ]
+        }),
+        tasks: [
+          {
+            id: 'l2_t1',
+            text: 'Подключите Server1 кабелем к Switch1',
+            check: () => state.links.some(l => (l.from === 'srv1' && l.to === 'sw1') || (l.from === 'sw1' && l.to === 'srv1'))
+          },
+          {
+            id: 'l2_t2',
+            text: 'Назначьте Server1 IP: 10.0.0.100 (маска 255.255.255.0)',
+            check: () => {
+              const d = getDevice('srv1');
+              return d && d.interfaces[0].ip === '10.0.0.100' && d.interfaces[0].mask === '255.255.255.0';
+            }
+          },
+          {
+            id: 'l2_t3',
+            text: 'Отправьте успешный Ping с PC1 на Server1 (10.0.0.100)',
+            check: () => state.lessonFlags?.l2_ping_ok === true
+          }
+        ]
+      },
+      {
+        id: 2,
+        badge: 'Урок 3 • Уровень L3 (Cisco IOS CLI)',
+        title: 'Маршрутизация между подсетями через Router',
+        theory: 'Устройства из разных IP-подсетей не могут общаться напрямую. Для передачи пакетов между подсетями 192.168.1.0/24 и 192.168.2.0/24 нужен маршрутизатор (Router) и настроенный шлюз по умолчанию (Default Gateway).',
+        tip: 'Откройте Router1 -> Терминал CLI. Введите: enable -> conf t -> int g0/0 -> ip address 192.168.1.1 255.255.255.0 -> no shutdown. То же самое для int g0/1 (192.168.2.1).',
+        setup: () => ({
+          devices: [
+            createDeviceObj('pc1', 'PC1', 'PC', 16, 52, { ip: '192.168.1.10', mask: '255.255.255.0', gateway: '192.168.1.1', up: true }),
+            createDeviceObj('r1', 'Router1', 'Router', 50, 32, {
+              interfaces: [
+                { name: 'Gig0/0', ip: '', mask: '255.255.255.0', up: false },
+                { name: 'Gig0/1', ip: '', mask: '255.255.255.0', up: false }
+              ]
+            }),
+            createDeviceObj('pc2', 'PC2', 'PC', 84, 52, { ip: '192.168.2.10', mask: '255.255.255.0', gateway: '192.168.2.1', up: true })
+          ],
+          links: [
+            { id: 'lnk_r1', from: 'pc1', fromPort: 'Fa0', to: 'r1', toPort: 'Gig0/0' },
+            { id: 'lnk_r2', from: 'r1', fromPort: 'Gig0/1', to: 'pc2', toPort: 'Fa0' }
+          ]
+        }),
+        tasks: [
+          {
+            id: 'l3_t1',
+            text: 'Настройте Gig0/0 на Router1: 192.168.1.1 и включите (no shutdown)',
+            check: () => {
+              const r = getDevice('r1');
+              const g0 = r?.interfaces.find(i => i.name === 'Gig0/0');
+              return g0 && g0.ip === '192.168.1.1' && g0.up === true;
+            }
+          },
+          {
+            id: 'l3_t2',
+            text: 'Настройте Gig0/1 на Router1: 192.168.2.1 и включите (no shutdown)',
+            check: () => {
+              const r = getDevice('r1');
+              const g1 = r?.interfaces.find(i => i.name === 'Gig0/1');
+              return g1 && g1.ip === '192.168.2.1' && g1.up === true;
+            }
+          },
+          {
+            id: 'l3_t3',
+            text: 'Выполните успешный Ping с PC1 на PC2 (192.168.2.10)',
+            check: () => state.lessonFlags?.l3_ping_ok === true
+          }
+        ]
+      },
+      {
+        id: 3,
+        badge: 'Урок 4 • Поиск неисправностей',
+        title: 'Troubleshooting: Найди и исправь ошибки',
+        theory: 'В реальных сетях сбои возникают из-за выключенных портов, неверной маски подсети или забытого шлюза по умолчанию. Используйте Ping, чтобы увидеть, на каком узле теряется пакет.',
+        tip: 'Попробуйте отправить Ping с PC1 на Server1 (172.16.20.10). Обратите внимание на шлюз PC1 (должен быть 172.16.10.1) и статус порта Gig0/1 на Router1.',
+        setup: () => ({
+          devices: [
+            createDeviceObj('pc1', 'PC1', 'PC', 15, 55, { ip: '172.16.10.5', mask: '255.255.255.0', gateway: '172.16.99.1', up: true }),
+            createDeviceObj('sw1', 'Switch1', 'Switch', 37, 55),
+            createDeviceObj('r1', 'Router1', 'Router', 61, 32, {
+              interfaces: [
+                { name: 'Gig0/0', ip: '172.16.10.1', mask: '255.255.255.0', up: true },
+                { name: 'Gig0/1', ip: '172.16.20.1', mask: '255.255.255.0', up: false }
+              ]
+            }),
+            createDeviceObj('srv1', 'Server1', 'Server', 85, 55, { ip: '172.16.20.10', mask: '255.255.255.0', gateway: '172.16.20.1', up: true })
+          ],
+          links: [
+            { id: 'lnk_t1', from: 'pc1', fromPort: 'Fa0', to: 'sw1', toPort: 'Fa0/1' },
+            { id: 'lnk_t2', from: 'sw1', fromPort: 'Fa0/2', to: 'r1', toPort: 'Gig0/0' },
+            { id: 'lnk_t3', from: 'r1', fromPort: 'Gig0/1', to: 'srv1', toPort: 'Fa0' }
+          ]
+        }),
+        tasks: [
+          {
+            id: 'l4_t1',
+            text: 'Исправьте шлюз по умолчанию на PC1 (172.16.10.1)',
+            check: () => getDevice('pc1')?.interfaces[0].gateway === '172.16.10.1'
+          },
+          {
+            id: 'l4_t2',
+            text: 'Включите интерфейс Gig0/1 на Router1 (no shutdown)',
+            check: () => getDevice('r1')?.interfaces.find(i => i.name === 'Gig0/1')?.up === true
+          },
+          {
+            id: 'l4_t3',
+            text: 'Достигните Server1 (172.16.20.10) с PC1 по Ping',
+            check: () => state.lessonFlags?.l4_ping_ok === true
+          }
+        ]
+      }
+    ];
+
+    // --- ФАБРИКА УСТРОЙСТВ ---
+    let macCounter = 1;
+    function generateMac() {
+      const hex = (macCounter++).toString(16).padStart(2, '0').toUpperCase();
+      return `00:1A:2B:3C:4D:${hex}`;
+    }
+
+    function createDeviceObj(id, name, type, xPercent, yPercent, custom = {}) {
+      let interfaces = [];
+      if (type === 'PC' || type === 'Server') {
+        interfaces = [{
+          name: 'Fa0',
+          ip: custom.ip ?? '',
+          mask: custom.mask ?? '255.255.255.0',
+          gateway: custom.gateway ?? '',
+          up: custom.up !== undefined ? custom.up : true
+        }];
+      } else if (type === 'Router') {
+        interfaces = custom.interfaces || [
+          { name: 'Gig0/0', ip: '', mask: '255.255.255.0', up: false },
+          { name: 'Gig0/1', ip: '', mask: '255.255.255.0', up: false },
+          { name: 'Gig0/2', ip: '', mask: '255.255.255.0', up: false }
+        ];
+      } else if (type === 'Switch') {
+        interfaces = [
+          { name: 'Fa0/1', ip: '', mask: '', up: true },
+          { name: 'Fa0/2', ip: '', mask: '', up: true },
+          { name: 'Fa0/3', ip: '', mask: '', up: true },
+          { name: 'Fa0/4', ip: '', mask: '', up: true }
+        ];
+      }
+
+      return {
+        id,
+        name,
+        type,
+        x: xPercent, // координаты в процентах от ширины/высоты холста
+        y: yPercent,
+        mac: generateMac(),
+        interfaces,
+        arpTable: {},
+        cliMode: type === 'Router' || type === 'Switch' ? 'user' : 'host', // 'user' | 'priv' | 'config' | 'config-if' | 'host'
+        selectedIfIndex: 0,
+        cliHistory: [
+          type === 'Router' || type === 'Switch'
+            ? `Cisco IOS Software, NetGlass Virtual IOS (v15.9)\nВведите "enable" для входа в привилегированный режим или "help".`
+            : `NetGlass OS Terminal [Версия 4.2]\nВведите "help" для списка сетевых утилит (ipconfig, ping, arp).`
+        ]
+      };
+    }
+
+    function getDevice(id) {
+      return state.devices.find(d => d.id === id);
+    }
+
+    function getDeviceIcon(type) {
+      switch (type) {
+        case 'PC': return '💻';
+        case 'Switch': return '🔀';
+        case 'Router': return '🌐';
+        case 'Server': return '🖥️';
+        default: return '📦';
+      }
+    }
+
+    function getDeviceTypeLabel(type) {
+      switch (type) {
+        case 'PC': return 'Рабочая станция (Host)';
+        case 'Switch': return 'Коммутатор L2 (2960)';
+        case 'Router': return 'Маршрутизатор L3 (ISR 4321)';
+        case 'Server': return 'Сервер приложений';
+        default: return type;
+      }
+    }
+
+    // --- ИНИЦИАЛИЗАЦИЯ И ЗАГРУЗКА УРОКОВ ---
+    window.addEventListener('DOMContentLoaded', () => {
+      renderLessonSelector();
+      loadLesson(0);
+      setupStageInteractions();
+      window.addEventListener('resize', renderTopology);
+    });
+
+    function switchMainTab(tab) {
+      state.mainTab = tab;
+      document.getElementById('nav-lessons').className = tab === 'lessons'
+        ? 'ios-pill-active px-3 sm:px-4 py-1.5 rounded-xl text-xs sm:text-sm transition-all cursor-pointer'
+        : 'px-3 sm:px-4 py-1.5 rounded-xl text-xs sm:text-sm text-zinc-300 hover:text-white transition-all cursor-pointer';
+      document.getElementById('nav-sandbox').className = tab === 'sandbox'
+        ? 'ios-pill-active px-3 sm:px-4 py-1.5 rounded-xl text-xs sm:text-sm transition-all cursor-pointer'
+        : 'px-3 sm:px-4 py-1.5 rounded-xl text-xs sm:text-sm text-zinc-300 hover:text-white transition-all cursor-pointer';
+      document.getElementById('nav-cli-guide').className = tab === 'guide'
+        ? 'ios-pill-active px-3 sm:px-4 py-1.5 rounded-xl text-xs sm:text-sm transition-all cursor-pointer'
+        : 'px-3 sm:px-4 py-1.5 rounded-xl text-xs sm:text-sm text-zinc-300 hover:text-white transition-all cursor-pointer';
+
+      const guideView = document.getElementById('view-guide');
+      const workspaceView = document.getElementById('view-workspace');
+      const lessonsSidebar = document.getElementById('lessons-sidebar');
+      const canvasCol = document.getElementById('canvas-column');
+
+      if (tab === 'guide') {
+        guideView.classList.remove('hidden');
+        workspaceView.classList.add('hidden');
+      } else {
+        guideView.classList.add('hidden');
+        workspaceView.classList.remove('hidden');
+
+        if (tab === 'sandbox') {
+          lessonsSidebar.classList.add('hidden');
+          canvasCol.classList.remove('lg:col-span-6');
+          canvasCol.classList.add('lg:col-span-9');
+          loadSandboxPreset();
+        } else {
+          lessonsSidebar.classList.remove('hidden');
+          canvasCol.classList.remove('lg:col-span-9');
+          canvasCol.classList.add('lg:col-span-6');
+          loadLesson(state.currentLessonIndex);
+        }
+        setTimeout(renderTopology, 30);
+      }
+    }
+
+    function renderLessonSelector() {
+      const container = document.getElementById('lesson-selector-list');
+      container.innerHTML = '';
+      LESSONS.forEach((lesson, idx) => {
+        const isCurrent = idx === state.currentLessonIndex;
+        const isDone = state.completedLessons.has(idx);
+        const btn = document.createElement('button');
+        btn.onclick = () => loadLesson(idx);
+        btn.className = `text-left p-2.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-2 ${
+          isCurrent
+            ? 'bg-white/15 border-white/40 text-white shadow-md'
+            : 'bg-white/5 border-white/10 text-zinc-300 hover:bg-white/10'
+        }`;
+        btn.innerHTML = `
+          <div class="truncate">
+            <div class="text-[10px] text-zinc-400">Урок ${idx + 1}</div>
+            <div class="text-xs font-medium truncate">${lesson.title}</div>
+          </div>
+          <span class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] shrink-0 ${
+            isDone ? 'bg-white text-black font-bold' : 'bg-white/10 text-zinc-400'
+          }">
+            ${isDone ? '✓' : idx + 1}
+          </span>
+        `;
+        container.appendChild(btn);
+      });
+    }
+
+    function loadLesson(index) {
+      state.currentLessonIndex = index;
+      state.lessonFlags = {};
+      state.toolMode = 'select';
+      state.cableStartDeviceId = null;
+      state.pingSourceDeviceId = null;
+      updateToolBanner();
+
+      const lesson = LESSONS[index];
+      const data = lesson.setup();
+      state.devices = data.devices;
+      state.links = data.links;
+      state.selectedDeviceId = state.devices[0]?.id || null;
+
+      document.getElementById('lesson-badge').textContent = lesson.badge;
+      document.getElementById('lesson-title').textContent = lesson.title;
+      document.getElementById('lesson-theory').textContent = lesson.theory;
+      document.getElementById('lesson-tip').textContent = lesson.tip;
+
+      renderLessonSelector();
+      renderTopology();
+      renderInspector();
+      evaluateLessonTasks();
+      clearSimulationLogs();
+      addSimLog(`[Лаборатория] Загружен «${lesson.title}». Выполните задания слева.`);
+    }
+
+    function loadSandboxPreset() {
+      state.toolMode = 'select';
+      state.cableStartDeviceId = null;
+      state.pingSourceDeviceId = null;
+      updateToolBanner();
+
+      state.devices = [
+        createDeviceObj('sb_pc1', 'PC1', 'PC', 18, 35, { ip: '192.168.10.2', mask: '255.255.255.0', gateway: '192.168.10.1', up: true }),
+        createDeviceObj('sb_sw1', 'Switch1', 'Switch', 38, 52),
+        createDeviceObj('sb_r1', 'Router1', 'Router', 60, 35, {
+          interfaces: [
+            { name: 'Gig0/0', ip: '192.168.10.1', mask: '255.255.255.0', up: true },
+            { name: 'Gig0/1', ip: '192.168.20.1', mask: '255.255.255.0', up: true }
+          ]
+        }),
+        createDeviceObj('sb_srv1', 'Server1', 'Server', 84, 52, { ip: '192.168.20.10', mask: '255.255.255.0', gateway: '192.168.20.1', up: true })
+      ];
+      state.links = [
+        { id: 'sb_l1', from: 'sb_pc1', fromPort: 'Fa0', to: 'sb_sw1', toPort: 'Fa0/1' },
+        { id: 'sb_l2', from: 'sb_sw1', fromPort: 'Fa0/2', to: 'sb_r1', toPort: 'Gig0/0' },
+        { id: 'sb_l3', from: 'sb_r1', fromPort: 'Gig0/1', to: 'sb_srv1', toPort: 'Fa0' }
+      ];
+      state.selectedDeviceId = 'sb_pc1';
+      renderTopology();
+      renderInspector();
+      clearSimulationLogs();
+      addSimLog('[Песочница] Свободный режим активен. Добавляйте любые устройства и соединяйте их.');
+    }
+
+    function resetCurrentTopology() {
+      if (state.mainTab === 'sandbox') {
+        loadSandboxPreset();
+      } else {
+        loadLesson(state.currentLessonIndex);
+      }
+      showToast('Топология сброшена к исходному состоянию', '🔄');
+    }
+
+    function goToNextLesson() {
+      const nextIdx = (state.currentLessonIndex + 1) % LESSONS.length;
+      loadLesson(nextIdx);
+    }
+
+    function evaluateLessonTasks() {
+      if (state.mainTab !== 'lessons') return;
+      const lesson = LESSONS[state.currentLessonIndex];
+      const listEl = document.getElementById('lesson-tasks-list');
+      listEl.innerHTML = '';
+
+      let passedCount = 0;
+      lesson.tasks.forEach(task => {
+        const done = task.check();
+        if (done) passedCount++;
+
+        const li = document.createElement('li');
+        li.className = `flex items-start gap-2.5 p-2 rounded-xl border text-xs transition-all ${
+          done
+            ? 'bg-white/15 border-white/35 text-white'
+            : 'bg-black/30 border-white/10 text-zinc-300'
+        }`;
+        li.innerHTML = `
+          <span class="w-4 h-4 rounded-full flex items-center justify-center text-[10px] mt-0.5 shrink-0 ${
+            done ? 'bg-white text-black font-bold' : 'border border-white/30 text-transparent'
+          }">✓</span>
+          <span class="leading-snug">${task.text}</span>
+        `;
+        listEl.appendChild(li);
+      });
+
+      document.getElementById('lesson-tasks-counter').textContent = `${passedCount}/${lesson.tasks.length}`;
+
+      const nextBtn = document.getElementById('next-lesson-btn');
+      if (passedCount === lesson.tasks.length) {
+        if (!state.completedLessons.has(lesson.id)) {
+          state.completedLessons.add(lesson.id);
+          showToast(`Поздравляем! «${lesson.title}» выполнен!`, '🏆');
+        }
+        nextBtn.classList.remove('hidden');
+      } else {
+        nextBtn.classList.add('hidden');
+      }
+
+      // Обновляем глобальный прогресс курса
+      const doneTotal = state.completedLessons.size;
+      document.getElementById('course-progress-text').textContent = `${doneTotal} / ${LESSONS.length}`;
+      document.getElementById('course-progress-bar').style.width = `${(doneTotal / LESSONS.length) * 100}%`;
+      renderLessonSelector();
+    }
+
+    // --- УПРАВЛЕНИЕ ИНСТРУМЕНТАМИ ХОЛСТА ---
+    function toggleToolMode(mode) {
+      if (state.toolMode === mode && mode !== 'select') {
+        state.toolMode = 'select';
+      } else {
+        state.toolMode = mode;
+      }
+      state.cableStartDeviceId = null;
+      state.pingSourceDeviceId = null;
+      updateToolBanner();
+      renderTopology();
+    }
+
+    function updateToolBanner() {
+      const cableBtn = document.getElementById('tool-cable-btn');
+      const pingBtn = document.getElementById('tool-ping-btn');
+      const cancelBtn = document.getElementById('cancel-tool-btn');
+      const bannerText = document.getElementById('canvas-status-text');
+
+      cableBtn.className = state.toolMode === 'cable'
+        ? 'ios-pill-active px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer'
+        : 'ios-pill px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer';
+
+      pingBtn.className = state.toolMode === 'ping'
+        ? 'ios-pill-active px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer'
+        : 'ios-pill px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer';
+
+      if (state.toolMode === 'select') {
+        cancelBtn.classList.add('hidden');
+        bannerText.textContent = 'Режим выбора: перетаскивайте устройства или нажмите на узел для настройки.';
+      } else if (state.toolMode === 'cable') {
+        cancelBtn.classList.remove('hidden');
+        bannerText.textContent = state.cableStartDeviceId
+          ? `Выберите второе устройство для подключения кабеля от ${getDevice(state.cableStartDeviceId)?.name}...`
+          : 'Режим кабеля: нажмите на первое устройство на схеме.';
+      } else if (state.toolMode === 'ping') {
+        cancelBtn.classList.remove('hidden');
+        bannerText.textContent = state.pingSourceDeviceId
+          ? `Выберите целевое устройство для отправки ICMP-пакета от ${getDevice(state.pingSourceDeviceId)?.name}...`
+          : 'Режим Ping: нажмите на устройство-отправитель пакета.';
+      }
+    }
+
+    function addDevice(type) {
+      const count = state.devices.filter(d => d.type === type).length + 1;
+      const prefix = type === 'Switch' ? 'Switch' : type === 'Router' ? 'Router' : type === 'Server' ? 'Server' : 'PC';
+      const id = `dev_${Date.now()}_${Math.floor(Math.random() * 100)}`;
+      const x = 25 + ((state.devices.length * 13) % 55);
+      const y = 25 + ((state.devices.length * 17) % 50);
+
+      const newDev = createDeviceObj(id, `${prefix}${count}`, type, x, y);
+      state.devices.push(newDev);
+      state.selectedDeviceId = id;
+      renderTopology();
+      renderInspector();
+      showToast(`Добавлено устройство ${newDev.name}`, getDeviceIcon(type));
+    }
+
+    function deleteSelectedDevice() {
+      if (!state.selectedDeviceId) return;
+      const dev = getDevice(state.selectedDeviceId);
+      state.devices = state.devices.filter(d => d.id !== state.selectedDeviceId);
+      state.links = state.links.filter(l => l.from !== state.selectedDeviceId && l.to !== state.selectedDeviceId);
+      state.selectedDeviceId = state.devices[0]?.id || null;
+      renderTopology();
+      renderInspector();
+      evaluateLessonTasks();
+      showToast(`Устройство ${dev?.name} удалено`, '🗑️');
+    }
+
+    // --- ОТРИСОВКА ТОПОЛОГИИ И ПЕРЕТАСКИВАНИЕ ---
+    function renderTopology() {
+      const stage = document.getElementById('topology-stage');
+      const svg = document.getElementById('topology-svg');
+      const devicesLayer = document.getElementById('devices-layer');
+      if (!stage || !svg || !devicesLayer) return;
+
+      const rect = stage.getBoundingClientRect();
+      const w = rect.width || 600;
+      const h = rect.height || 400;
+
+      // 1. Отрисовка кабелей в SVG
+      svg.innerHTML = '';
+      state.links.forEach(link => {
+        const d1 = getDevice(link.from);
+        const d2 = getDevice(link.to);
+        if (!d1 || !d2) return;
+
+        const x1 = (d1.x / 100) * w;
+        const y1 = (d1.y / 100) * h;
+        const x2 = (d2.x / 100) * w;
+        const y2 = (d2.y / 100) * h;
+
+        const port1Up = isDevicePortUp(d1, link.fromPort);
+        const port2Up = isDevicePortUp(d2, link.toPort);
+        const linkUp = port1Up && port2Up;
+
+        // Группа кабеля
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.style.pointerEvents = 'stroke';
+        g.style.cursor = 'pointer';
+        g.onclick = (e) => {
+          e.stopPropagation();
+          state.links = state.links.filter(l => l.id !== link.id);
+          renderTopology();
+          evaluateLessonTasks();
+          showToast('Кабель отсоединён', '✂️');
+        };
+
+        // Невидимая толстая линия для удобного клика/тапа
+        const hitLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        hitLine.setAttribute('x1', x1);
+        hitLine.setAttribute('y1', y1);
+        hitLine.setAttribute('x2', x2);
+        hitLine.setAttribute('y2', y2);
+        hitLine.setAttribute('stroke', 'transparent');
+        hitLine.setAttribute('stroke-width', '16');
+
+        // Видимый кабель в монохромной эстетике
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', x1);
+        line.setAttribute('y1', y1);
+        line.setAttribute('x2', x2);
+        line.setAttribute('y2', y2);
+        line.setAttribute('stroke', linkUp ? 'rgba(255, 255, 255, 0.72)' : 'rgba(255, 255, 255, 0.22)');
+        line.setAttribute('stroke-width', linkUp ? '2.5' : '2');
+        if (!linkUp) {
+          line.setAttribute('stroke-dasharray', '6 5');
+        }
+
+        // Индикаторы линка у концов кабеля
+        const c1 = createPortDot(x1 + (x2 - x1) * 0.16, y1 + (y2 - y1) * 0.16, port1Up);
+        const c2 = createPortDot(x2 + (x1 - x2) * 0.16, y2 + (y1 - y2) * 0.16, port2Up);
+
+        g.appendChild(hitLine);
+        g.appendChild(line);
+        g.appendChild(c1);
+        g.appendChild(c2);
+        svg.appendChild(g);
+      });
+
+      // 2. Отрисовка HTML-карточек устройств
+      devicesLayer.innerHTML = '';
+      state.devices.forEach(dev => {
+        const el = document.createElement('div');
+        const isSelected = dev.id === state.selectedDeviceId;
+        const isSource = dev.id === state.cableStartDeviceId || dev.id === state.pingSourceDeviceId;
+
+        el.className = `device-node ios-glass-card rounded-2xl px-3 py-2 flex flex-col items-center gap-1 min-w-[84px] sm:min-w-[96px] absolute -translate-x-1/2 -translate-y-1/2 ${
+          isSelected ? 'selected' : ''
+        } ${isSource ? 'ping-source' : ''}`;
+        el.style.left = `${dev.x}%`;
+        el.style.top = `${dev.y}%`;
+
+        // Подпись IP под устройством
+        let subLabel = '';
+        if (dev.type === 'PC' || dev.type === 'Server') {
+          subLabel = dev.interfaces[0].ip || 'Нет IP';
+        } else if (dev.type === 'Router') {
+          const activeIps = dev.interfaces.filter(i => i.ip).map(i => i.ip);
+          subLabel = activeIps.length ? activeIps[0] : 'Не настроен';
+        } else {
+          subLabel = 'L2 Switch';
+        }
+
+        el.innerHTML = `
+          <div class="text-xl sm:text-2xl leading-none">${getDeviceIcon(dev.type)}</div>
+          <div class="text-xs font-semibold text-white tracking-tight">${dev.name}</div>
+          <div class="text-[10px] font-mono-code px-1.5 py-0.5 rounded bg-black/50 text-zinc-300 border border-white/10">
+            ${subLabel}
+          </div>
+        `;
+
+        // Обработка нажатий (мышь и тач)
+        const startDrag = (clientX, clientY) => {
+          if (state.toolMode === 'cable') {
+            handleCableDeviceClick(dev.id);
+            return;
+          }
+          if (state.toolMode === 'ping') {
+            handlePingDeviceClick(dev.id);
+            return;
+          }
+
+          state.selectedDeviceId = dev.id;
+          state.draggingDeviceId = dev.id;
+          const stageRect = stage.getBoundingClientRect();
+          const devPxX = (dev.x / 100) * stageRect.width;
+          const devPxY = (dev.y / 100) * stageRect.height;
+          state.dragOffset = {
+            x: clientX - stageRect.left - devPxX,
+            y: clientY - stageRect.top - devPxY
+          };
+          renderTopology();
+          renderInspector();
+        };
+
+        el.addEventListener('mousedown', (e) => {
+          e.stopPropagation();
+          startDrag(e.clientX, e.clientY);
+        });
+
+        el.addEventListener('touchstart', (e) => {
+          e.stopPropagation();
+          if (e.touches.length === 1) {
+            startDrag(e.touches[0].clientX, e.touches[0].clientY);
+          }
+        }, { passive: true });
+
+        devicesLayer.appendChild(el);
+      });
+    }
+
+    function createPortDot(cx, cy, isUp) {
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('cx', cx);
+      circle.setAttribute('cy', cy);
+      circle.setAttribute('r', '4');
+      circle.setAttribute('fill', isUp ? '#ffffff' : '#3f3f46');
+      circle.setAttribute('stroke', '#09090b');
+      circle.setAttribute('stroke-width', '1.5');
+      return circle;
+    }
+
+    function isDevicePortUp(device, portName) {
+      if (!device) return false;
+      if (device.type === 'PC' || device.type === 'Server') {
+        return device.interfaces[0]?.up === true;
+      }
+      if (device.type === 'Switch') return true;
+      const iface = device.interfaces.find(i => i.name === portName);
+      return iface ? iface.up === true : false;
+    }
+
+    function setupStageInteractions() {
+      const stage = document.getElementById('topology-stage');
+
+      const handleMove = (clientX, clientY) => {
+        if (!state.draggingDeviceId) return;
+        const dev = getDevice(state.draggingDeviceId);
+        if (!dev) return;
+        const rect = stage.getBoundingClientRect();
+        const rawX = clientX - rect.left - state.dragOffset.x;
+        const rawY = clientY - rect.top - state.dragOffset.y;
+
+        dev.x = Math.max(8, Math.min(92, (rawX / rect.width) * 100));
+        dev.y = Math.max(10, Math.min(88, (rawY / rect.height) * 100));
+        renderTopology();
+      };
+
+      window.addEventListener('mousemove', (e) => handleMove(e.clientX, e.clientY));
+      window.addEventListener('touchmove', (e) => {
+        if (state.draggingDeviceId && e.touches.length === 1) {
+          handleMove(e.touches[0].clientX, e.touches[0].clientY);
+        }
+      }, { passive: true });
+
+      const endDrag = () => {
+        state.draggingDeviceId = null;
+      };
+      window.addEventListener('mouseup', endDrag);
+      window.addEventListener('touchend', endDrag);
+    }
+
+    // --- ПОДКЛЮЧЕНИЕ КАБЕЛЕЙ ---
+    function handleCableDeviceClick(deviceId) {
+      if (!state.cableStartDeviceId) {
+        state.cableStartDeviceId = deviceId;
+        updateToolBanner();
+        renderTopology();
+        return;
+      }
+
+      if (state.cableStartDeviceId === deviceId) {
+        state.cableStartDeviceId = null;
+        updateToolBanner();
+        renderTopology();
+        return;
+      }
+
+      const d1 = getDevice(state.cableStartDeviceId);
+      const d2 = getDevice(deviceId);
+
+      // Проверка дубликата
+      const exists = state.links.some(l =>
+        (l.from === d1.id && l.to === d2.id) || (l.from === d2.id && l.to === d1.id)
+      );
+      if (exists) {
+        showToast('Эти устройства уже соединены кабелем', '⚠️');
+        state.cableStartDeviceId = null;
+        state.toolMode = 'select';
+        updateToolBanner();
+        renderTopology();
+        return;
+      }
+
+      const p1 = getNextAvailablePort(d1);
+      const p2 = getNextAvailablePort(d2);
+
+      if (!p1 || !p2) {
+        showToast('Нет свободных портов на одном из устройств', '⚠️');
+        state.cableStartDeviceId = null;
+        state.toolMode = 'select';
+        updateToolBanner();
+        renderTopology();
+        return;
+      }
+
+      state.links.push({
+        id: `lnk_${Date.now()}`,
+        from: d1.id,
+        fromPort: p1,
+        to: d2.id,
+        toPort: p2
+      });
+
+      addSimLog(`[Физический уровень] Соединены ${d1.name} (${p1}) ↔ ${d2.name} (${p2}).`);
+      showToast(`Подключено: ${d1.name} ↔ ${d2.name}`, '🔌');
+
+      state.cableStartDeviceId = null;
+      state.toolMode = 'select';
+      updateToolBanner();
+      renderTopology();
+      evaluateLessonTasks();
+    }
+
+    function getNextAvailablePort(device) {
+      const usedPorts = new Set();
+      state.links.forEach(l => {
+        if (l.from === device.id) usedPorts.add(l.fromPort);
+        if (l.to === device.id) usedPorts.add(l.toPort);
+      });
+      const free = device.interfaces.find(i => !usedPorts.has(i.name));
+      return free ? free.name : null;
+    }
+
+    // --- ИНСПЕКТОР УСТРОЙСТВА И НАСТРОЙКА IP ---
+    function switchInspectorTab(tab) {
+      state.inspectorTab = tab;
+      document.getElementById('insp-tab-gui').className = tab === 'gui'
+        ? 'ios-pill-active py-1.5 rounded-xl text-xs cursor-pointer'
+        : 'py-1.5 rounded-xl text-xs text-zinc-300 hover:text-white cursor-pointer';
+      document.getElementById('insp-tab-cli').className = tab === 'cli'
+        ? 'ios-pill-active py-1.5 rounded-xl text-xs cursor-pointer'
+        : 'py-1.5 rounded-xl text-xs text-zinc-300 hover:text-white cursor-pointer';
+
+      document.getElementById('insp-panel-gui').classList.toggle('hidden', tab !== 'gui');
+      document.getElementById('insp-panel-cli').classList.toggle('hidden', tab !== 'cli');
+
+      if (tab === 'cli') {
+        renderCliOutput();
+        setTimeout(() => document.getElementById('cli-input')?.focus(), 50);
+      }
+    }
+
+    function renderInspector() {
+      const dev = getDevice(state.selectedDeviceId);
+      const emptyBox = document.getElementById('inspector-empty');
+      const contentBox = document.getElementById('inspector-content');
+
+      if (!dev) {
+        emptyBox.classList.remove('hidden');
+        contentBox.classList.add('hidden');
+        return;
+      }
+
+      emptyBox.classList.add('hidden');
+      contentBox.classList.remove('hidden');
+
+      document.getElementById('insp-icon').textContent = getDeviceIcon(dev.type);
+      document.getElementById('insp-name').textContent = dev.name;
+      document.getElementById('insp-type').textContent = getDeviceTypeLabel(dev.type);
+      document.getElementById('insp-mac').textContent = dev.mac;
+
+      const hostForm = document.getElementById('gui-host-form');
+      const netIfaces = document.getElementById('gui-network-interfaces');
+
+      if (dev.type === 'PC' || dev.type === 'Server') {
+        hostForm.classList.remove('hidden');
+        netIfaces.classList.add('hidden');
+
+        const nic = dev.interfaces[0];
+        document.getElementById('input-ip').value = nic.ip;
+        document.getElementById('input-mask').value = nic.mask;
+        document.getElementById('input-gateway').value = nic.gateway;
+
+        const toggleBtn = document.getElementById('toggle-host-port-btn');
+        if (nic.up) {
+          toggleBtn.textContent = 'ВКЛ (UP)';
+          toggleBtn.className = 'px-3 py-1 rounded-full text-[11px] font-semibold cursor-pointer bg-white text-black border-white';
+        } else {
+          toggleBtn.textContent = 'ВЫКЛ (DOWN)';
+          toggleBtn.className = 'px-3 py-1 rounded-full text-[11px] font-medium cursor-pointer bg-white/10 text-zinc-400 border-white/20';
+        }
+      } else {
+        hostForm.classList.add('hidden');
+        netIfaces.classList.remove('hidden');
+        renderNetworkInterfacesList(dev);
+      }
+
+      renderCliOutput();
+      renderCliQuickChips(dev);
+    }
+
+    function renderNetworkInterfacesList(dev) {
+      const container = document.getElementById('interfaces-list');
+      container.innerHTML = '';
+
+      dev.interfaces.forEach((iface, idx) => {
+        const card = document.createElement('div');
+        card.className = 'p-2.5 rounded-xl bg-black/40 border border-white/10 space-y-2';
+
+        if (dev.type === 'Router') {
+          card.innerHTML = `
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-mono-code font-semibold text-white">${iface.name}</span>
+              <button onclick="toggleRouterInterface(${idx})" class="px-2.5 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer ${
+                iface.up ? 'bg-white text-black' : 'bg-white/10 text-zinc-400'
+              }">
+                ${iface.up ? 'UP' : 'DOWN'}
+              </button>
+            </div>
+            <div class="grid grid-cols-2 gap-1.5">
+              <input id="r-ip-${idx}" type="text" value="${iface.ip}" placeholder="IP адрес" class="px-2 py-1 rounded-lg bg-black/60 border border-white/15 text-[11px] font-mono-code text-white" />
+              <input id="r-mask-${idx}" type="text" value="${iface.mask}" placeholder="Маска" class="px-2 py-1 rounded-lg bg-black/60 border border-white/15 text-[11px] font-mono-code text-white" />
+            </div>
+            <button onclick="saveRouterInterface(${idx})" class="w-full py-1 rounded-lg bg-white/10 hover:bg-white/20 text-[11px] text-white cursor-pointer">
+              Сохранить ${iface.name}
+            </button>
+          `;
+        } else {
+          // Switch
+          card.innerHTML = `
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-mono-code text-white">${iface.name}</span>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-white/15 text-zinc-200">L2 Active</span>
+            </div>
+          `;
+        }
+        container.appendChild(card);
+      });
+    }
+
+    function isValidIpv4(ip) {
+      if (!ip) return true; // разрешаем пустой сброс
+      const parts = ip.trim().split('.');
+      if (parts.length !== 4) return false;
+      return parts.every(p => /^\d+$/.test(p) && Number(p) >= 0 && Number(p) <= 255);
+    }
+
+    function saveHostConfig() {
+      const dev = getDevice(state.selectedDeviceId);
+      if (!dev) return;
+
+      const ip = document.getElementById('input-ip').value.trim();
+      const mask = document.getElementById('input-mask').value.trim() || '255.255.255.0';
+      const gateway = document.getElementById('input-gateway').value.trim();
+
+      if (!isValidIpv4(ip) || !isValidIpv4(mask) || !isValidIpv4(gateway)) {
+        showToast('Некорректный формат IPv4-адреса или маски', '⚠️');
+        return;
+      }
+
+      dev.interfaces[0].ip = ip;
+      dev.interfaces[0].mask = mask;
+      dev.interfaces[0].gateway = gateway;
+
+      renderTopology();
+      renderInspector();
+      evaluateLessonTasks();
+      showToast(`Параметры ${dev.name} сохранены`, '✅');
+    }
+
+    function toggleHostInterface() {
+      const dev = getDevice(state.selectedDeviceId);
+      if (!dev) return;
+      dev.interfaces[0].up = !dev.interfaces[0].up;
+      renderTopology();
+      renderInspector();
+      evaluateLessonTasks();
+    }
+
+    function toggleRouterInterface(idx) {
+      const dev = getDevice(state.selectedDeviceId);
+      if (!dev) return;
+      dev.interfaces[idx].up = !dev.interfaces[idx].up;
+      renderTopology();
+      renderInspector();
+      evaluateLessonTasks();
+    }
+
+    function saveRouterInterface(idx) {
+      const dev = getDevice(state.selectedDeviceId);
+      if (!dev) return;
+      const ip = document.getElementById(`r-ip-${idx}`).value.trim();
+      const mask = document.getElementById(`r-mask-${idx}`).value.trim() || '255.255.255.0';
+
+      if (!isValidIpv4(ip) || !isValidIpv4(mask)) {
+        showToast('Неверный IP-адрес или маска', '⚠️');
+        return;
+      }
+
+      dev.interfaces[idx].ip = ip;
+      dev.interfaces[idx].mask = mask;
+      renderTopology();
+      renderInspector();
+      evaluateLessonTasks();
+      showToast(`${dev.name} ${dev.interfaces[idx].name} обновлён`, '✅');
+    }
+
+    // --- СИМУЛЯТОР CISCO IOS CLI И КОНСОЛЬ ПК ---
+    function getPromptString(dev) {
+      if (!dev) return '>';
+      if (dev.type === 'PC' || dev.type === 'Server') {
+        return `${dev.name}>`;
+      }
+      if (dev.cliMode === 'user') return `${dev.name}>`;
+      if (dev.cliMode === 'priv') return `${dev.name}#`;
+      if (dev.cliMode === 'config') return `${dev.name}(config)#`;
+      if (dev.cliMode === 'config-if') return `${dev.name}(config-if)#`;
+      return `${dev.name}>`;
+    }
+
+    function renderCliOutput() {
+      const dev = getDevice(state.selectedDeviceId);
+      if (!dev) return;
+      document.getElementById('cli-prompt-label').textContent = getPromptString(dev);
+      const out = document.getElementById('cli-output');
+      out.innerHTML = dev.cliHistory
+        .map(line => `<div class="whitespace-pre-wrap break-words">${escapeHtml(line)}</div>`)
+        .join('');
+      out.scrollTop = out.scrollHeight;
+    }
+
+    function renderCliQuickChips(dev) {
+      const chips = document.getElementById('cli-quick-chips');
+      chips.innerHTML = '';
+      const commands = dev.type === 'Router' || dev.type === 'Switch'
+        ? ['enable', 'conf t', 'int g0/0', 'no shutdown', 'show ip int br']
+        : ['ipconfig', 'arp -a', 'help'];
+
+      commands.forEach(cmd => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = cmd;
+        btn.className = 'px-2 py-0.5 rounded-lg bg-white/10 hover:bg-white/20 text-[10px] font-mono-code text-zinc-300 cursor-pointer';
+        btn.onclick = () => {
+          document.getElementById('cli-input').value = cmd;
+          document.getElementById('cli-input').focus();
+        };
+        chips.appendChild(btn);
+      });
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function handleCliSubmit(e) {
+      e.preventDefault();
+      const inputEl = document.getElementById('cli-input');
+      const rawCmd = inputEl.value.trim();
+      inputEl.value = '';
+      if (!rawCmd) return;
+
+      const dev = getDevice(state.selectedDeviceId);
+      if (!dev) return;
+
+      dev.cliHistory.push(`${getPromptString(dev)} ${rawCmd}`);
+      processCliCommand(dev, rawCmd);
+
+      renderCliOutput();
+      renderTopology();
+      if (state.inspectorTab === 'gui') renderInspector();
+      evaluateLessonTasks();
+    }
+
+    function processCliCommand(dev, rawCmd) {
+      const cmd = rawCmd.toLowerCase();
+      const tokens = rawCmd.trim().split(/\s+/);
+
+      // Команда ping работает на всех устройствах с IP
+      if (tokens[0].toLowerCase() === 'ping' && tokens[1]) {
+        const targetIp = tokens[1];
+        dev.cliHistory.push(`Отправка 4 ICMP Echo-пакетов на ${targetIp}...`);
+        runPingSimulation(dev.id, targetIp, true);
+        return;
+      }
+
+      // Команды рабочих станций (PC / Server)
+      if (dev.type === 'PC' || dev.type === 'Server') {
+        const nic = dev.interfaces[0];
+        if (cmd === 'help' || cmd === '?') {
+          dev.cliHistory.push('Доступные команды:\n  ipconfig               - показать текущие настройки IPv4\n  ipconfig <ip> <mask>   - назначить IP-адрес и маску\n  gateway <ip>           - задать основной шлюз\n  ping <ip>              - отправить ICMP пакет на узел\n  arp -a                 - показать ARP-кэш');
+        } else if (cmd === 'ipconfig') {
+          dev.cliHistory.push(`Ethernet adapter ${nic.name}:\n  Состояние . . . : ${nic.up ? 'Подключено (UP)' : 'Отключено (DOWN)'}\n  IPv4-адрес  . . : ${nic.ip || 'Не задан'}\n  Маска подсети . : ${nic.mask || 'Не задана'}\n  Основной шлюз . : ${nic.gateway || 'Не задан'}`);
+        } else if (tokens[0].toLowerCase() === 'ipconfig' && tokens[1]) {
+          if (isValidIpv4(tokens[1])) {
+            nic.ip = tokens[1];
+            if (tokens[2] && isValidIpv4(tokens[2])) nic.mask = tokens[2];
+            dev.cliHistory.push(`IPv4 успешно обновлен: ${nic.ip} (${nic.mask})`);
+          } else {
+            dev.cliHistory.push('% Ошибка: неверный формат IP-адреса.');
+          }
+        } else if (tokens[0].toLowerCase() === 'gateway' && tokens[1]) {
+          if (isValidIpv4(tokens[1])) {
+            nic.gateway = tokens[1];
+            dev.cliHistory.push(`Основной шлюз установлен: ${nic.gateway}`);
+          } else {
+            dev.cliHistory.push('% Ошибка: неверный IP шлюза.');
+          }
+        } else if (cmd === 'arp -a') {
+          const entries = Object.entries(dev.arpTable);
+          if (!entries.length) {
+            dev.cliHistory.push('ARP-таблица пуста.');
+          } else {
+            dev.cliHistory.push('Интернет-адрес      Физический адрес\n' + entries.map(([ip, mac]) => `${ip.padEnd(20)}${mac}`).join('\n'));
+          }
+        } else {
+          dev.cliHistory.push(`Неизвестная команда "${rawCmd}". Введите help.`);
+        }
+        return;
+      }
+
+      // Команды Cisco IOS (Router / Switch)
+      if (cmd === 'help' || cmd === '?') {
+        dev.cliHistory.push('Команды Cisco IOS:\n  enable / disable\n  configure terminal (conf t)\n  interface <gig0/0 | gig0/1> (int g0/0)\n  ip address <ip> <mask>\n  no shutdown / shutdown\n  show ip interface brief (sh ip int br)\n  show ip route\n  ping <ip>\n  exit / end');
+        return;
+      }
+
+      if (cmd === 'enable' || cmd === 'en') {
+        dev.cliMode = 'priv';
+        return;
+      }
+
+      if (cmd === 'disable') {
+        dev.cliMode = 'user';
+        return;
+      }
+
+      if (cmd === 'end') {
+        if (dev.cliMode !== 'user') dev.cliMode = 'priv';
+        return;
+      }
+
+      if (cmd === 'exit') {
+        if (dev.cliMode === 'config-if') dev.cliMode = 'config';
+        else if (dev.cliMode === 'config') dev.cliMode = 'priv';
+        else if (dev.cliMode === 'priv') dev.cliMode = 'user';
+        return;
+      }
+
+      if (cmd.startsWith('sh') && (cmd.includes('int') || cmd.includes('br'))) {
+        const rows = dev.interfaces.map(i =>
+          `${i.name.padEnd(12)} ${(i.ip || 'unassigned').padEnd(16)} YES manual ${i.up ? 'up' : 'administratively down'}`
+        );
+        dev.cliHistory.push('Interface    IP-Address       OK? Method Status\n' + rows.join('\n'));
+        return;
+      }
+
+      if (cmd === 'show ip route' || cmd === 'sh ip route') {
+        const connected = dev.interfaces.filter(i => i.ip && i.up);
+        if (!connected.length) {
+          dev.cliHistory.push('Таблица маршрутизации пуста (нет активных L3 интерфейсов).');
+        } else {
+          const lines = connected.map(i => `C    ${getNetworkAddress(i.ip, i.mask)} is directly connected, ${i.name}`);
+          dev.cliHistory.push('Codes: C - connected\n' + lines.join('\n'));
+        }
+        return;
+      }
+
+      if (cmd === 'configure terminal' || cmd === 'conf t') {
+        if (dev.cliMode === 'user') {
+          dev.cliHistory.push('% Сначала перейдите в привилегированный режим командой "enable".');
+        } else {
+          dev.cliMode = 'config';
+        }
+        return;
+      }
+
+      if ((cmd.startsWith('interface ') || cmd.startsWith('int ')) && tokens[1]) {
+        if (dev.cliMode !== 'config' && dev.cliMode !== 'config-if') {
+          dev.cliHistory.push('% Команда доступна только в режиме конфигурации (conf t).');
+          return;
+        }
+        const arg = tokens[1].toLowerCase().replace('gigabitethernet', 'gig').replace('g0/', 'gig0/').replace('fa0/', 'fa0/');
+        const idx = dev.interfaces.findIndex(i => i.name.toLowerCase() === arg);
+        if (idx === -1) {
+          dev.cliHistory.push(`% Неверный интерфейс "${tokens[1]}". Доступны: ${dev.interfaces.map(i => i.name).join(', ')}`);
+        } else {
+          dev.selectedIfIndex = idx;
+          dev.cliMode = 'config-if';
+        }
+        return;
+      }
+
+      if (dev.cliMode === 'config-if') {
+        const iface = dev.interfaces[dev.selectedIfIndex];
+        if (cmd === 'no shutdown' || cmd === 'no shut') {
+          iface.up = true;
+          dev.cliHistory.push(`%LINK-3-UPDOWN: Interface ${iface.name}, changed state to up`);
+          return;
+        }
+        if (cmd === 'shutdown' || cmd === 'shut') {
+          iface.up = false;
+          dev.cliHistory.push(`%LINK-5-CHANGED: Interface ${iface.name}, changed state to administratively down`);
+          return;
+        }
+        if (tokens[0].toLowerCase() === 'ip' && tokens[1]?.toLowerCase() === 'address' && tokens[2] && tokens[3]) {
+          if (dev.type === 'Switch') {
+            dev.cliHistory.push('% На L2-портах коммутатора IP-адрес не назначается.');
+            return;
+          }
+          if (isValidIpv4(tokens[2]) && isValidIpv4(tokens[3])) {
+            iface.ip = tokens[2];
+            iface.mask = tokens[3];
+            dev.cliHistory.push(`Назначен IP ${iface.ip} / ${iface.mask} на ${iface.name}`);
+          } else {
+            dev.cliHistory.push('% Некорректный IP-адрес или маска подсети.');
+          }
+          return;
+        }
+      }
+
+      dev.cliHistory.push(`% Нераспознанная команда "${rawCmd}" в текущем режиме.`);
+    }
+
+    // --- СЕТЕВАЯ МАТЕМАТИКА (IPv4 / МАСКИ / МАРШРУТИЗАЦИЯ) ---
+    function ipToLong(ip) {
+      return ip.split('.').reduce((acc, octet) => ((acc << 8) + parseInt(octet, 10)) >>> 0, 0);
+    }
+
+    function longToIp(long) {
+      return [
+        (long >>> 24) & 255,
+        (long >>> 16) & 255,
+        (long >>> 8) & 255,
+        long & 255
+      ].join('.');
+    }
+
+    function getNetworkAddress(ip, mask) {
+      if (!isValidIpv4(ip) || !isValidIpv4(mask)) return '';
+      return longToIp((ipToLong(ip) & ipToLong(mask)) >>> 0);
+    }
+
+    function isSameSubnet(ip1, mask1, ip2) {
+      if (!ip1 || !mask1 || !ip2) return false;
+      return getNetworkAddress(ip1, mask1) === getNetworkAddress(ip2, mask1);
+    }
+
+    // --- ДВИЖОК СИМУЛЯЦИИ ПАКЕТОВ И АНИМАЦИЯ НА ХОЛСТЕ ---
+    function handlePingDeviceClick(deviceId) {
+      if (!state.pingSourceDeviceId) {
+        state.pingSourceDeviceId = deviceId;
+        updateToolBanner();
+        renderTopology();
+        return;
+      }
+
+      const srcId = state.pingSourceDeviceId;
+      const dstDev = getDevice(deviceId);
+
+      state.pingSourceDeviceId = null;
+      state.toolMode = 'select';
+      updateToolBanner();
+      renderTopology();
+
+      if (srcId === deviceId) {
+        showToast('Выберите другое целевое устройство для Ping', 'ℹ️');
+        return;
+      }
+
+      // Находим IP целевого устройства
+      let targetIp = '';
+      if (dstDev.type === 'PC' || dstDev.type === 'Server') {
+        targetIp = dstDev.interfaces[0].ip;
+      } else if (dstDev.type === 'Router') {
+        const upIface = dstDev.interfaces.find(i => i.ip);
+        targetIp = upIface ? upIface.ip : '';
+      }
+
+      if (!targetIp) {
+        addSimLog(`[Ошибка Ping] На целевом устройстве ${dstDev.name} не настроен IPv4-адрес!`, 'error');
+        showToast(`На ${dstDev.name} не задан IP-адрес`, '⚠️');
+        return;
+      }
+
+      runPingSimulation(srcId, targetIp, false);
+    }
+
+    function runPingSimulation(sourceId, targetIp, fromCli = false) {
+      if (state.isAnimatingPacket) {
+        showToast('Дождитесь завершения текущей передачи пакета', '⏳');
+        return;
+      }
+
+      const srcDev = getDevice(sourceId);
+      if (!srcDev) return;
+
+      // Проверяем интерфейс отправителя
+      let srcIp = '';
+      let srcMask = '255.255.255.0';
+      let srcGateway = '';
+
+      if (srcDev.type === 'PC' || srcDev.type === 'Server') {
+        const nic = srcDev.interfaces[0];
+        if (!nic.up) {
+          logPingFailure(srcDev, targetIp, 'Сетевой интерфейс отправителя выключен (DOWN).', fromCli);
+          return;
+        }
+        if (!nic.ip) {
+          logPingFailure(srcDev, targetIp, 'На устройстве отправителя не настроен IPv4-адрес.', fromCli);
+          return;
+        }
+        srcIp = nic.ip;
+        srcMask = nic.mask;
+        srcGateway = nic.gateway;
+      } else if (srcDev.type === 'Router') {
+        const activeIf = srcDev.interfaces.find(i => i.ip && i.up);
+        if (!activeIf) {
+          logPingFailure(srcDev, targetIp, 'На маршрутизаторе нет активных интерфейсов с IP.', fromCli);
+          return;
+        }
+        srcIp = activeIf.ip;
+        srcMask = activeIf.mask;
+      } else {
+        logPingFailure(srcDev, targetIp, 'L2 коммутатор не генерирует IP-трафик напрямую.', fromCli);
+        return;
+      }
+
+      // Находим целевое устройство в топологии по IP
+      const targetDevice = state.devices.find(d =>
+        d.interfaces.some(i => i.ip === targetIp)
+      );
+
+      // Строим путь по топологии (BFS) и проверяем L2/L3 связность
+      const trace = computeNetworkPath(srcDev, srcIp, srcMask, srcGateway, targetIp, targetDevice);
+
+      addSimLog(`[ICMP] ${srcDev.name} (${srcIp}) → ${targetIp} | Начало трассировки...`);
+      document.getElementById('sim-status-pill').textContent = 'Передача...';
+
+      animatePacketPath(trace, () => {
+        document.getElementById('sim-status-pill').textContent = trace.success ? 'Успех (200 OK)' : 'Потеря пакета';
+
+        if (trace.success) {
+          // Обновляем ARP-кэш
+          if (targetDevice) {
+            srcDev.arpTable[targetIp] = targetDevice.mac;
+          }
+
+          addSimLog(`[ICMP Успех] Ответ от ${targetIp}: байт=32 время=4мс TTL=${trace.ttl} (Хопов: ${trace.hops.length - 1})`, 'success');
+          if (fromCli) {
+            srcDev.cliHistory.push(`Ответ от ${targetIp}: число байт=32 время=4мс TTL=${trace.ttl}\nСтатистика Ping: Отправлено = 4, Получено = 4, Потеряно = 0 (0% потерь)`);
+            renderCliOutput();
+          }
+
+          // Проверяем выполнение флагов для уроков
+          checkLessonPingMilestones(srcDev.id, targetDevice?.id, targetIp);
+          evaluateLessonTasks();
+        } else {
+          logPingFailure(srcDev, targetIp, trace.reason, fromCli);
+        }
+      });
+    }
+
+    function logPingFailure(srcDev, targetIp, reason, fromCli) {
+      addSimLog(`[ICMP Сбой] ${srcDev.name} → ${targetIp}: ${reason}`, 'error');
+      if (fromCli) {
+        srcDev.cliHistory.push(`Сбой передачи: ${reason}\nСтатистика Ping: Отправлено = 4, Получено = 0, Потеряно = 4 (100% потерь)`);
+        renderCliOutput();
+      }
+      showToast(reason, '❌');
+    }
+
+    function checkLessonPingMilestones(srcId, dstId, targetIp) {
+      if (!state.lessonFlags) state.lessonFlags = {};
+      const idx = state.currentLessonIndex;
+
+      if (idx === 0 && ((srcId === 'pc1' && dstId === 'pc2') || (srcId === 'pc2' && dstId === 'pc1'))) {
+        state.lessonFlags.l1_ping_ok = true;
+      }
+      if (idx === 1 && srcId === 'pc1' && targetIp === '10.0.0.100') {
+        state.lessonFlags.l2_ping_ok = true;
+      }
+      if (idx === 2 && srcId === 'pc1' && targetIp === '192.168.2.10') {
+        state.lessonFlags.l3_ping_ok = true;
+      }
+      if (idx === 3 && srcId === 'pc1' && targetIp === '172.16.20.10') {
+        state.lessonFlags.l4_ping_ok = true;
+      }
+    }
+
+    // Поиск пути по графу с проверкой активных портов и правил маршрутизации
+    function computeNetworkPath(srcDev, srcIp, srcMask, srcGateway, targetIp, targetDevice) {
+      // Находим физический путь по графу (BFS)
+      const queue = [[srcDev.id]];
+      const visited = new Set([srcDev.id]);
+      let physicalPath = null;
+
+      while (queue.length > 0) {
+        const path = queue.shift();
+        const currId = path[path.length - 1];
+        if (targetDevice && currId === targetDevice.id) {
+          physicalPath = path;
+          break;
+        }
+        const neighbors = state.links.filter(l => l.from === currId || l.to === currId);
+        for (const link of neighbors) {
+          const nextId = link.from === currId ? link.to : link.from;
+          if (!visited.has(nextId)) {
+            visited.add(nextId);
+            queue.push([...path, nextId]);
+          }
+        }
+      }
+
+      if (!targetDevice || !physicalPath) {
+        return {
+          success: false,
+          hops: [srcDev.id],
+          reason: `Узел ${targetIp} недостижим (нет физического соединения кабелем).`
+        };
+      }
+
+      // Проверяем каждый сегмент пути на состояние портов (UP/DOWN)
+      const validHops = [srcDev.id];
+      for (let i = 0; i < physicalPath.length - 1; i++) {
+        const uId = physicalPath[i];
+        const vId = physicalPath[i + 1];
+        const link = state.links.find(l => (l.from === uId && l.to === vId) || (l.from === vId && l.to === uId));
+        const uDev = getDevice(uId);
+        const vDev = getDevice(vId);
+
+        const uPort = link.from === uId ? link.fromPort : link.toPort;
+        const vPort = link.from === vId ? link.fromPort : link.toPort;
+
+        if (!isDevicePortUp(uDev, uPort)) {
+          return {
+            success: false,
+            hops: validHops,
+            reason: `Порт ${uPort} на ${uDev.name} выключен (DOWN).`
+          };
+        }
+        if (!isDevicePortUp(vDev, vPort)) {
+          validHops.push(vId);
+          return {
+            success: false,
+            hops: validHops,
+            reason: `Порт ${vPort} на ${vDev.name} выключен (administratively down).`
+          };
+        }
+        validHops.push(vId);
+      }
+
+      // Проверка L3 логики: одна подсеть или через маршрутизатор
+      const sameNet = isSameSubnet(srcIp, srcMask, targetIp);
+      const hasRouterOnPath = physicalPath.some(id => getDevice(id)?.type === 'Router');
+
+      if (!sameNet && !hasRouterOnPath) {
+        return {
+          success: false,
+          hops: [srcDev.id],
+          reason: `Узлы в разных подсетях (${getNetworkAddress(srcIp, srcMask)} и ${getNetworkAddress(targetIp, srcMask)}), но на пути нет маршрутизатора.`
+        };
+      }
+
+      if (!sameNet && (srcDev.type === 'PC' || srcDev.type === 'Server')) {
+        if (!srcGateway) {
+          return {
+            success: false,
+            hops: [srcDev.id],
+            reason: `На ${srcDev.name} не указан основной шлюз (Default Gateway) для выхода в другую подсеть.`
+          };
+        }
+        // Проверяем, совпадает ли gateway с IP подключенного интерфейса роутера
+        const routerId = physicalPath.find(id => getDevice(id)?.type === 'Router');
+        const router = getDevice(routerId);
+        const routerHasGatewayIp = router?.interfaces.some(i => i.ip === srcGateway && i.up);
+        if (!routerHasGatewayIp) {
+          return {
+            success: false,
+            hops: validHops.slice(0, validHops.indexOf(routerId) + 1),
+            reason: `Шлюз ${srcGateway}, указанный на ${srcDev.name}, недоступен или не совпадает с IP роутера.`
+          };
+        }
+      }
+
+      // Проверяем обратный маршрут от целевого узла, если он в другой подсети
+      if (!sameNet && (targetDevice.type === 'PC' || targetDevice.type === 'Server')) {
+        const dstNic = targetDevice.interfaces[0];
+        const routerId = physicalPath.find(id => getDevice(id)?.type === 'Router');
+        const router = getDevice(routerId);
+        const routerHasDstGw = router?.interfaces.some(i => i.ip === dstNic.gateway && i.up);
+        if (!dstNic.gateway || !routerHasDstGw) {
+          return {
+            success: false,
+            hops: validHops,
+            reason: `Пакет дошёл до ${targetDevice.name}, но на нём неверно настроен шлюз для обратного ответа.`
+          };
+        }
+      }
+
+      // Проверяем маску целевого узла (если в одной сети, маски должны совпадать)
+      if (sameNet && (targetDevice.type === 'PC' || targetDevice.type === 'Server')) {
+        const dstNic = targetDevice.interfaces[0];
+        if (!isSameSubnet(dstNic.ip, dstNic.mask, srcIp)) {
+          return {
+            success: false,
+            hops: validHops,
+            reason: `Несовпадение масок подсети на ${srcDev.name} и ${targetDevice.name}.`
+          };
+        }
+      }
+
+      const routerCount = physicalPath.filter(id => getDevice(id)?.type === 'Router').length;
+      return {
+        success: true,
+        hops: validHops,
+        ttl: 64 - routerCount
+      };
+    }
+
+    // Плавная анимация светящегося монохромного пакета вдоль маршрута
+    function animatePacketPath(trace, onComplete) {
+      const stage = document.getElementById('topology-stage');
+      const svg = document.getElementById('topology-svg');
+      const rect = stage.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+
+      const hops = trace.hops;
+      if (hops.length < 2) {
+        onComplete();
+        return;
+      }
+
+      state.isAnimatingPacket = true;
+
+      // Если успех, пакет летит туда и обратно (Echo Request + Echo Reply)
+      const fullSequence = trace.success
+        ? [...hops, ...hops.slice(0, -1).reverse()]
+        : hops;
+
+      const packetGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      packetGroup.setAttribute('class', 'packet-orb');
+
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('r', '7');
+      circle.setAttribute('fill', '#ffffff');
+      circle.setAttribute('stroke', '#09090b');
+      circle.setAttribute('stroke-width', '2');
+
+      const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      labelBg.setAttribute('x', '-22');
+      labelBg.setAttribute('y', '-24');
+      labelBg.setAttribute('width', '44');
+      labelBg.setAttribute('height', '14');
+      labelBg.setAttribute('rx', '7');
+      labelBg.setAttribute('fill', 'rgba(9, 9, 11, 0.85)');
+      labelBg.setAttribute('stroke', 'rgba(255, 255, 255, 0.4)');
+      labelBg.setAttribute('stroke-width', '1');
+
+      const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      labelText.setAttribute('x', '0');
+      labelText.setAttribute('y', '-14');
+      labelText.setAttribute('text-anchor', 'middle');
+      labelText.setAttribute('fill', '#ffffff');
+      labelText.setAttribute('font-size', '8');
+      labelText.setAttribute('font-family', 'JetBrains Mono, monospace');
+      labelText.textContent = 'ICMP';
+
+      packetGroup.appendChild(circle);
+      packetGroup.appendChild(labelBg);
+      packetGroup.appendChild(labelText);
+      svg.appendChild(packetGroup);
+
+      let segmentIndex = 0;
+      const segmentDuration = 420; // мс на один пролёт кабеля
+
+      function animateSegment() {
+        if (segmentIndex >= fullSequence.length - 1) {
+          packetGroup.remove();
+          state.isAnimatingPacket = false;
+          onComplete();
+          return;
+        }
+
+        const isReply = trace.success && segmentIndex >= hops.length - 1;
+        labelText.textContent = isReply ? 'REPLY' : 'ICMP';
+
+        const fromDev = getDevice(fullSequence[segmentIndex]);
+        const toDev = getDevice(fullSequence[segmentIndex + 1]);
+        const x1 = (fromDev.x / 100) * w;
+        const y1 = (fromDev.y / 100) * h;
+        const x2 = (toDev.x / 100) * w;
+        const y2 = (toDev.y / 100) * h;
+
+        const startTime = performance.now();
+
+        function step(now) {
+          const elapsed = now - startTime;
+          const t = Math.min(1, elapsed / segmentDuration);
+          // Плавная функция easeInOutQuad
+          const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+          const curX = x1 + (x2 - x1) * ease;
+          const curY = y1 + (y2 - y1) * ease;
+          packetGroup.setAttribute('transform', `translate(${curX}, ${curY})`);
+
+          if (t < 1) {
+            requestAnimationFrame(step);
+          } else {
+            segmentIndex++;
+            animateSegment();
+          }
+        }
+
+        requestAnimationFrame(step);
+      }
+
+      animateSegment();
+    }
+
+    // --- ЖУРНАЛ СИМУЛЯЦИИ И УВЕДОМЛЕНИЯ ---
+    function addSimLog(message, type = 'info') {
+      const list = document.getElementById('simulation-log-list');
+      const row = document.createElement('div');
+      const time = new Date().toLocaleTimeString('ru-RU', { hour12: false });
+
+      let styleClass = 'text-zinc-300 bg-white/5 border-white/10';
+      if (type === 'success') styleClass = 'text-white bg-white/15 border-white/35 font-medium';
+      if (type === 'error') styleClass = 'text-zinc-300 bg-black/50 border-white/15';
+
+      row.className = `px-2.5 py-1 rounded-lg border ${styleClass}`;
+      row.textContent = `[${time}] ${message}`;
+      list.appendChild(row);
+      list.scrollTop = list.scrollHeight;
+    }
+
+    function clearSimulationLogs() {
+      document.getElementById('simulation-log-list').innerHTML = '';
+    }
+
+    let toastTimeout = null;
+    function showToast(message, icon = '✨') {
+      const toast = document.getElementById('toast-notification');
+      document.getElementById('toast-message').textContent = message;
+      document.getElementById('toast-icon').textContent = icon;
+
+      toast.classList.remove('opacity-0', 'translate-y-3');
+      toast.classList.add('opacity-100', 'translate-y-0');
+
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', 'translate-y-3');
+      }, 2800);
+    }
+  </script>
+</body>
+</html>
